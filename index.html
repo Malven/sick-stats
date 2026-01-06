@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SickStats - Personnel Sickness Tracker</title>
+    <title>SickStats - Personalens Sjukfrånvaro</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -11,7 +11,7 @@
     <header>
       <h1>SickStats</h1>
       <div class="summary">
-        <span id="sick-count">0</span> personnel currently sick
+        <span id="sick-count">0</span> personal sjukskrivna just nu
       </div>
     </header>
 
@@ -19,7 +19,7 @@
     <main>
       <div class="controls">
         <button id="add-personnel-btn" class="btn btn-primary">
-          + Add Personnel
+          + Lägg till Personal
         </button>
       </div>
 
@@ -29,7 +29,10 @@
       </div>
 
       <div id="empty-state" class="empty-state">
-        <p>No personnel records yet. Click "Add Personnel" to get started.</p>
+        <p>
+          Inga personalposter än. Klicka på "Lägg till Personal" för att komma
+          igång.
+        </p>
       </div>
     </main>
 
@@ -37,26 +40,26 @@
     <div id="personnel-modal" class="modal">
       <div class="modal-content">
         <div class="modal-header">
-          <h2 id="personnel-modal-title">Add Personnel</h2>
-          <button class="close-btn" aria-label="Close">&times;</button>
+          <h2 id="personnel-modal-title">Lägg till Personal</h2>
+          <button class="close-btn" aria-label="Stäng">&times;</button>
         </div>
         <form id="personnel-form">
           <div class="form-group">
             <label for="personnel-name"
-              >Full Name <span class="required">*</span></label
+              >Fullständigt Namn <span class="required">*</span></label
             >
             <input type="text" id="personnel-name" name="name" required />
           </div>
           <div class="form-group">
-            <label for="personnel-role">Role/Department</label>
+            <label for="personnel-role">Roll/Avdelning</label>
             <input type="text" id="personnel-role" name="role" />
           </div>
           <input type="hidden" id="personnel-id" name="id" />
           <div class="form-actions">
             <button type="button" class="btn btn-secondary cancel-btn">
-              Cancel
+              Avbryt
             </button>
-            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="submit" class="btn btn-primary">Spara</button>
           </div>
         </form>
       </div>
@@ -66,31 +69,31 @@
     <div id="sick-modal" class="modal">
       <div class="modal-content">
         <div class="modal-header">
-          <h2>Register Sick Leave</h2>
-          <button class="close-btn" aria-label="Close">&times;</button>
+          <h2>Registrera Sjukfrånvaro</h2>
+          <button class="close-btn" aria-label="Stäng">&times;</button>
         </div>
         <form id="sick-form">
           <div class="form-group">
-            <label for="sick-person-name">Personnel</label>
+            <label for="sick-person-name">Personal</label>
             <input type="text" id="sick-person-name" readonly />
           </div>
           <div class="form-group">
             <label for="sick-start-date"
-              >Start Date <span class="required">*</span></label
+              >Startdatum <span class="required">*</span></label
             >
             <input type="date" id="sick-start-date" name="startDate" required />
           </div>
           <div class="form-group">
-            <label for="sick-comment">Comment/Reason</label>
+            <label for="sick-comment">Kommentar/Orsak</label>
             <textarea id="sick-comment" name="comment" rows="3"></textarea>
           </div>
           <input type="hidden" id="sick-person-id" name="personId" />
           <div class="form-actions">
             <button type="button" class="btn btn-secondary cancel-btn">
-              Cancel
+              Avbryt
             </button>
             <button type="submit" class="btn btn-primary">
-              Register Sick Leave
+              Registrera Sjukfrånvaro
             </button>
           </div>
         </form>
@@ -101,17 +104,17 @@
     <div id="return-modal" class="modal">
       <div class="modal-content">
         <div class="modal-header">
-          <h2>Register Return to Work</h2>
-          <button class="close-btn" aria-label="Close">&times;</button>
+          <h2>Registrera Återgång till Arbete</h2>
+          <button class="close-btn" aria-label="Stäng">&times;</button>
         </div>
         <form id="return-form">
           <div class="form-group">
-            <label for="return-person-name">Personnel</label>
+            <label for="return-person-name">Personal</label>
             <input type="text" id="return-person-name" readonly />
           </div>
           <div class="form-group">
             <label for="return-date"
-              >Return Date <span class="required">*</span></label
+              >Återgångsdatum <span class="required">*</span></label
             >
             <input type="date" id="return-date" name="returnDate" required />
           </div>
@@ -119,10 +122,10 @@
           <input type="hidden" id="return-record-index" name="recordIndex" />
           <div class="form-actions">
             <button type="button" class="btn btn-secondary cancel-btn">
-              Cancel
+              Avbryt
             </button>
             <button type="submit" class="btn btn-primary">
-              Register Return
+              Registrera Återgång
             </button>
           </div>
         </form>
@@ -133,24 +136,26 @@
     <div id="delete-modal" class="modal">
       <div class="modal-content">
         <div class="modal-header">
-          <h2>Confirm Deletion</h2>
-          <button class="close-btn" aria-label="Close">&times;</button>
+          <h2>Bekräfta Borttagning</h2>
+          <button class="close-btn" aria-label="Stäng">&times;</button>
         </div>
         <div class="modal-body">
           <p>
-            Are you sure you want to delete
+            Är du säker på att du vill ta bort
             <strong id="delete-person-name"></strong>?
           </p>
           <p class="warning">
-            All associated sickness records will be permanently removed.
+            Alla tillhörande sjukfrånvaroposter kommer att tas bort permanent.
           </p>
         </div>
         <input type="hidden" id="delete-person-id" />
         <div class="form-actions">
           <button type="button" class="btn btn-secondary cancel-btn">
-            Cancel
+            Avbryt
           </button>
-          <button id="confirm-delete-btn" class="btn btn-danger">Delete</button>
+          <button id="confirm-delete-btn" class="btn btn-danger">
+            Ta Bort
+          </button>
         </div>
       </div>
     </div>

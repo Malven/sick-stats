@@ -19,8 +19,8 @@ function loadData() {
       personnelData = [];
     }
   } catch (error) {
-    console.error('Error loading data from localStorage:', error);
-    alert('Error loading data. Starting with empty records.');
+    console.error('Fel vid inläsning av data från localStorage:', error);
+    alert('Fel vid inläsning av data. Startar med tomma poster.');
     personnelData = [];
   }
 }
@@ -30,8 +30,10 @@ function saveData() {
   try {
     localStorage.setItem('personnelData', JSON.stringify(personnelData));
   } catch (error) {
-    console.error('Error saving data to localStorage:', error);
-    alert('Error saving data. Please check your browser storage settings.');
+    console.error('Fel vid sparande av data till localStorage:', error);
+    alert(
+      'Fel vid sparande av data. Vänligen kontrollera dina webbläsarinställningar.'
+    );
   }
 }
 
@@ -95,7 +97,7 @@ function registerSickLeave(personId, startDate, comment = '') {
   );
   if (hasOpenPeriod) {
     alert(
-      'This person already has an open sick period. Please close it before registering a new one.'
+      'Denna person har redan en öppen sjukskrivningsperiod. Vänligen avsluta den innan du registrerar en ny.'
     );
     return false;
   }
@@ -121,13 +123,15 @@ function registerReturn(personId, returnDate) {
     record => record.endDate === null
   );
   if (!openRecord) {
-    alert('No open sick period found for this person.');
+    alert('Ingen öppen sjukskrivningsperiod hittades för denna person.');
     return false;
   }
 
   // Validate return date is not before start date
   if (new Date(returnDate) < new Date(openRecord.startDate)) {
-    alert('Return date cannot be earlier than the sick start date.');
+    alert(
+      'Återgångsdatum kan inte vara tidigare än sjukskrivningens startdatum.'
+    );
     return false;
   }
 
@@ -198,13 +202,13 @@ function createPersonnelCard(person) {
     const days = calculateSickDays(currentSick.startDate, today);
     sicknessInfoHTML = `
             <div class="sickness-info current">
-                <p><strong>Sick since:</strong> ${formatDate(
+                <p><strong>Sjuk sedan:</strong> ${formatDate(
                   currentSick.startDate
                 )}</p>
-                <p><strong>Days sick:</strong> ${days}</p>
+                <p><strong>Antal dagar sjuk:</strong> ${days}</p>
                 ${
                   currentSick.comment
-                    ? `<p><strong>Reason:</strong> ${escapeHtml(
+                    ? `<p><strong>Orsak:</strong> ${escapeHtml(
                         currentSick.comment
                       )}</p>`
                     : ''
@@ -226,7 +230,7 @@ function createPersonnelCard(person) {
                 <div class="history-item">
                     ${formatDate(record.startDate)} - ${formatDate(
           record.endDate
-        )} (${days} days)
+        )} (${days} dagar)
                     ${
                       record.comment
                         ? `<br><em>${escapeHtml(record.comment)}</em>`
@@ -239,7 +243,7 @@ function createPersonnelCard(person) {
 
     historyHTML = `
             <div class="sickness-history">
-                <h4>Recent History (${closedRecords.length} total)</h4>
+                <h4>Senaste Historik (${closedRecords.length} totalt)</h4>
                 ${historyItems}
             </div>
         `;
@@ -256,7 +260,7 @@ function createPersonnelCard(person) {
                 }
             </div>
             <span class="status-badge ${isSick ? 'sick' : 'at-work'}">
-                ${isSick ? 'Sick' : 'At Work'}
+                ${isSick ? 'Sjuk' : 'På Jobbet'}
             </span>
         </div>
         ${sicknessInfoHTML}
@@ -264,20 +268,20 @@ function createPersonnelCard(person) {
         <div class="personnel-actions">
             ${
               !isSick
-                ? `<button class="btn btn-small btn-danger mark-sick-btn" data-id="${person.id}">Mark Sick</button>`
+                ? `<button class="btn btn-small btn-danger mark-sick-btn" data-id="${person.id}">Markera Sjuk</button>`
                 : ''
             }
             ${
               isSick
-                ? `<button class="btn btn-small btn-success mark-return-btn" data-id="${person.id}">Returned to Work</button>`
+                ? `<button class="btn btn-small btn-success mark-return-btn" data-id="${person.id}">Återgång till Arbete</button>`
                 : ''
             }
             <button class="btn btn-small btn-secondary edit-btn" data-id="${
               person.id
-            }">Edit</button>
+            }">Redigera</button>
             <button class="btn btn-small btn-danger delete-btn" data-id="${
               person.id
-            }">Delete</button>
+            }">Ta Bort</button>
         </div>
     `;
 
@@ -317,7 +321,7 @@ function closeAllModals() {
 // Add Personnel
 function handleAddPersonnel() {
   document.getElementById('personnel-modal-title').textContent =
-    'Add Personnel';
+    'Lägg till Personal';
   document.getElementById('personnel-form').reset();
   document.getElementById('personnel-id').value = '';
   openModal('personnel-modal');
@@ -329,7 +333,7 @@ function handleEditPersonnel(personId) {
   if (!person) return;
 
   document.getElementById('personnel-modal-title').textContent =
-    'Edit Personnel';
+    'Redigera Personal';
   document.getElementById('personnel-id').value = person.id;
   document.getElementById('personnel-name').value = person.name;
   document.getElementById('personnel-role').value = person.role;
@@ -345,7 +349,7 @@ function handleSavePersonnel(event) {
   const id = document.getElementById('personnel-id').value;
 
   if (!name) {
-    alert('Name is required.');
+    alert('Namn krävs.');
     return;
   }
 
@@ -402,7 +406,7 @@ function handleSaveSickLeave(event) {
   const comment = document.getElementById('sick-comment').value;
 
   if (!startDate) {
-    alert('Start date is required.');
+    alert('Startdatum krävs.');
     return;
   }
 
@@ -419,7 +423,7 @@ function handleMarkReturn(personId) {
 
   const currentSick = getCurrentSickStatus(person);
   if (!currentSick) {
-    alert('No open sick period found.');
+    alert('Ingen öppen sjukskrivningsperiod hittades.');
     return;
   }
 
@@ -440,7 +444,7 @@ function handleSaveReturn(event) {
   const returnDate = document.getElementById('return-date').value;
 
   if (!returnDate) {
-    alert('Return date is required.');
+    alert('Återgångsdatum krävs.');
     return;
   }
 
@@ -456,7 +460,7 @@ function handleSaveReturn(event) {
 
 function formatDate(dateString) {
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString('sv-SE', {
     year: 'numeric',
     month: 'short',
     day: 'numeric'
