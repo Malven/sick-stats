@@ -108,7 +108,7 @@ function isLeaveActive(record) {
   const startDateStr = record.startDate;
 
   // If start date is in the future, it's not active yet (compare as strings)
-  if (startDateStr >= today) return false;
+  if (startDateStr > today) return false;
 
   // If no end date, it's active (sick/VAB) - started and not ended
   if (record.endDate === null) return true;
@@ -450,7 +450,18 @@ function createPersonnelCard(person) {
       .slice(-3)
       .reverse()
       .map(record => {
-        const days = calculateSickDays(record.startDate, record.endDate);
+        // Only calculate days and format end date if endDate exists
+        let days = 0;
+        let endDateDisplay = '';
+        if (record.endDate) {
+          days = calculateSickDays(record.startDate, record.endDate);
+          endDateDisplay = ` - ${formatDate(record.endDate)}`;
+        } else {
+          // This shouldn't happen for closed records, but handle it gracefully
+          const today = new Date().toISOString().split('T')[0];
+          days = calculateSickDays(record.startDate, today);
+          endDateDisplay = ` - ${formatDate(today)}`;
+        }
         const typeLabel =
           record.type === 'sick'
             ? 'Sjuk'
@@ -463,7 +474,7 @@ function createPersonnelCard(person) {
                 <div class="history-item">
                     ${typeLabel}: ${formatDate(
           record.startDate
-        )} - ${formatDate(record.endDate)} (${days} dagar)
+        )}${endDateDisplay} (${days} dagar)
                     ${
                       record.comment
                         ? `<br><em>${escapeHtml(record.comment)}</em>`
