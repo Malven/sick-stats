@@ -546,6 +546,21 @@ function createPersonnelCard(person) {
     // Check if warning is needed for sick leave >= 7 days
     const showWarning = currentLeave.type === 'sick' && days >= 7;
 
+    // Check if end date is in the future and show return date
+    let returnDateHTML = '';
+    if (currentLeave.endDate) {
+      const endDateStr = currentLeave.endDate;
+      if (endDateStr > today) {
+        // Calculate return date (day after end date)
+        const endDateObj = new Date(endDateStr);
+        endDateObj.setDate(endDateObj.getDate() + 1);
+        const returnDate = endDateObj.toISOString().split('T')[0];
+        returnDateHTML = `<p><strong>Åter:</strong> ${formatDate(
+          returnDate
+        )}</p>`;
+      }
+    }
+
     leaveInfoHTML = `
             <div class="leave-info current ${currentLeave.type}">
                 <p><strong>${leaveInfoLabel}</strong> ${formatDate(
@@ -558,6 +573,7 @@ function createPersonnelCard(person) {
                       )}</p>`
                     : ''
                 }
+                ${returnDateHTML}
                 <p><strong>${leaveTypeLabel}</strong> ${days}</p>
                 ${
                   showWarning
