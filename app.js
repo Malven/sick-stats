@@ -178,15 +178,30 @@ function registerReturn(personId, returnDate) {
     return false;
   }
 
+  // Calculate end date as one day before return date
+  // If they return on date X, their leave ended on date X-1
+  const returnDateObj = new Date(returnDate);
+  returnDateObj.setDate(returnDateObj.getDate() - 1);
+  const endDate = returnDateObj.toISOString().split('T')[0];
+
+  // Validate that the calculated end date is not before start date
+  // This allows same-day start and end (1-day leave) when return is the day after start
+  if (endDate < activeRecord.startDate) {
+    alert(
+      'Återgångsdatum måste vara samma dag eller senare än frånvarons startdatum.'
+    );
+    return false;
+  }
+
   // Validate return date is not before start date (compare as strings YYYY-MM-DD)
-  // This allows today and any future date
+  // This allows same day (for same-day start/end) or any future date
   if (returnDate < activeRecord.startDate) {
     alert('Återgångsdatum kan inte vara tidigare än frånvarons startdatum.');
     return false;
   }
 
   // Set the end date (this works for all leave types)
-  activeRecord.endDate = returnDate;
+  activeRecord.endDate = endDate;
   saveData();
   return true;
 }
