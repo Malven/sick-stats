@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Statistik - Sjukfrånvaro</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <!-- Header -->
+    <header>
+      <div class="header-top">
+        <h1>Sjukfrånvaro</h1>
+        <nav class="header-nav">
+          <a href="index.html" class="nav-link">Översikt</a>
+        </nav>
+      </div>
+      <div class="summary">
+        <span id="sick-count">0</span> sjuka, <span id="vab-count">0</span> VAB,
+        <span id="parental-count">0</span> föräldralediga (<span
+          id="total-absent"
+          >0</span
+        >
+        totalt)
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+      <div class="charts-container">
+        <div class="chart-wrapper">
+          <h2>Frånvaro de senaste 30 dagarna</h2>
+          <canvas id="rolling-chart"></canvas>
+        </div>
+        <div class="chart-wrapper">
+          <h2>Totala sjukdagar per personal</h2>
+          <canvas id="sick-days-chart"></canvas>
+        </div>
+      </div>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

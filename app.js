@@ -243,6 +243,116 @@ function getLeaveCounts() {
 }
 
 // ===========================
+// Chart Data Functions
+// ===========================
+
+// Check if a leave record was active on a specific date
+function wasLeaveActiveOnDate(record, dateStr) {
+  if (!record) return false;
+
+  const startDateStr = record.startDate;
+
+  // If start date is after the target date, it's not active
+  if (startDateStr > dateStr) return false;
+
+  // If no end date, check if date is on or after start date and not in the future
+  if (record.endDate === null) {
+    const today = new Date().toISOString().split('T')[0];
+    return dateStr >= startDateStr && dateStr <= today;
+  }
+
+  // If has end date, check if date falls between start and end (inclusive)
+  const endDateStr = record.endDate;
+  return dateStr >= startDateStr && dateStr <= endDateStr;
+}
+
+// Get 30-day rolling data for chart
+function get30DayRollingData() {
+  const dates = [];
+  const sick = [];
+  const vab = [];
+  const parental = [];
+
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  // Generate dates for the last 30 days
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+    dates.push(dateStr);
+
+    // Count personnel with active leave on this date
+    let sickCount = 0;
+    let vabCount = 0;
+    let parentalCount = 0;
+
+    personnelData.forEach(person => {
+      if (person.sicknessRecords) {
+        person.sicknessRecords.forEach(record => {
+          if (wasLeaveActiveOnDate(record, dateStr)) {
+            if (record.type === 'sick') {
+              sickCount++;
+            } else if (record.type === 'vab') {
+              vabCount++;
+            } else if (record.type === 'parental') {
+              parentalCount++;
+            }
+          }
+        });
+      }
+    });
+
+    sick.push(sickCount);
+    vab.push(vabCount);
+    parental.push(parentalCount);
+  }
+
+  return { dates, sick, vab, parental };
+}
+
+// Get total sick days per personnel
+function getTotalSickDaysPerPersonnel() {
+  const result = [];
+
+  personnelData.forEach(person => {
+    let totalSickDays = 0;
+
+    if (person.sicknessRecords) {
+      person.sicknessRecords.forEach(record => {
+        // Only count records with type === 'sick'
+        if (record.type === 'sick') {
+          if (record.endDate) {
+            // Closed record - calculate days
+            totalSickDays += calculateSickDays(
+              record.startDate,
+              record.endDate
+            );
+          } else {
+            // Open record - calculate days up to today
+            const today = new Date().toISOString().split('T')[0];
+            totalSickDays += calculateSickDays(record.startDate, today);
+          }
+        }
+      });
+    }
+
+    if (totalSickDays > 0 || result.length === 0) {
+      result.push({
+        name: person.name,
+        days: totalSickDays
+      });
+    }
+  });
+
+  // Sort by days descending
+  result.sort((a, b) => b.days - a.days);
+
+  return result;
+}
+
+// ===========================
 // UI Rendering
 // ===========================
 
@@ -433,6 +543,9 @@ function createPersonnelCard(person) {
     }
     const days = calculateSickDays(currentLeave.startDate, calculationEndDate);
 
+    // Check if warning is needed for sick leave >= 7 days
+    const showWarning = currentLeave.type === 'sick' && days >= 7;
+
     leaveInfoHTML = `
             <div class="leave-info current ${currentLeave.type}">
                 <p><strong>${leaveInfoLabel}</strong> ${formatDate(
@@ -446,6 +559,11 @@ function createPersonnelCard(person) {
                     : ''
                 }
                 <p><strong>${leaveTypeLabel}</strong> ${days}</p>
+                ${
+                  showWarning
+                    ? `<p class="warning"><strong>⚠️ Varning:</strong> Läkarintyg krävs efter 7 dagar</p>`
+                    : ''
+                }
                 ${
                   currentLeave.comment
                     ? `<p><strong>Kommentar:</strong> ${escapeHtml(
@@ -775,61 +893,299 @@ function escapeHtml(text) {
 }
 
 // ===========================
+// Chart Initialization
+// ===========================
+
+let rollingChart = null;
+let sickDaysChart = null;
+
+// Initialize 30-day rolling chart
+function init30DayChart(canvasElement) {
+  const data = get30DayRollingData();
+
+  // Format dates for display (short format)
+  const formattedDates = data.dates.map(dateStr => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
+  });
+
+  const ctx = canvasElement.getContext('2d');
+
+  // Destroy existing chart if it exists
+  if (rollingChart) {
+    rollingChart.destroy();
+  }
+
+  rollingChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: formattedDates,
+      datasets: [
+        {
+          label: 'Sjuk',
+          data: data.sick,
+          borderColor: '#ff6b9d',
+          backgroundColor: 'rgba(255, 107, 157, 0.1)',
+          tension: 0.4,
+          fill: true
+        },
+        {
+          label: 'VAB',
+          data: data.vab,
+          borderColor: '#ffc107',
+          backgroundColor: 'rgba(255, 193, 7, 0.1)',
+          tension: 0.4,
+          fill: true
+        },
+        {
+          label: 'Föräldraledig',
+          data: data.parental,
+          borderColor: '#9c27b0',
+          backgroundColor: 'rgba(156, 39, 176, 0.1)',
+          tension: 0.4,
+          fill: true
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            color: '#ffffff',
+            usePointStyle: true,
+            padding: 15,
+            font: {
+              size: 12,
+              weight: '600'
+            }
+          }
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          backgroundColor: 'rgba(26, 26, 26, 0.95)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          borderColor: '#2a2a2a',
+          borderWidth: 1,
+          padding: 12
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            color: 'rgba(255, 255, 255, 0.05)',
+            drawBorder: false
+          },
+          ticks: {
+            color: '#b0b0b0',
+            maxRotation: 45,
+            minRotation: 45
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grid: {
+            color: 'rgba(255, 255, 255, 0.05)',
+            drawBorder: false
+          },
+          ticks: {
+            color: '#b0b0b0',
+            stepSize: 1,
+            precision: 0
+          }
+        }
+      },
+      interaction: {
+        mode: 'nearest',
+        axis: 'x',
+        intersect: false
+      }
+    }
+  });
+}
+
+// Initialize sick days per personnel chart
+function initSickDaysChart(canvasElement) {
+  const data = getTotalSickDaysPerPersonnel();
+
+  // Limit to top 20 to avoid overcrowding
+  const displayData = data.slice(0, 20);
+
+  const ctx = canvasElement.getContext('2d');
+
+  // Destroy existing chart if it exists
+  if (sickDaysChart) {
+    sickDaysChart.destroy();
+  }
+
+  sickDaysChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: displayData.map(item => item.name),
+      datasets: [
+        {
+          label: 'Sjukdagar',
+          data: displayData.map(item => item.days),
+          backgroundColor: '#ff6b9d',
+          borderColor: '#ff4081',
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: 'rgba(26, 26, 26, 0.95)',
+          titleColor: '#ffffff',
+          bodyColor: '#ffffff',
+          borderColor: '#2a2a2a',
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: function (context) {
+              return context.parsed.x + ' dagar';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          grid: {
+            color: 'rgba(255, 255, 255, 0.05)',
+            drawBorder: false
+          },
+          ticks: {
+            color: '#b0b0b0',
+            stepSize: 1,
+            precision: 0
+          }
+        },
+        y: {
+          grid: {
+            display: false,
+            drawBorder: false
+          },
+          ticks: {
+            color: '#b0b0b0'
+          }
+        }
+      }
+    }
+  });
+}
+
+// Initialize all charts
+function initCharts() {
+  const rollingCanvas = document.getElementById('rolling-chart');
+  const sickDaysCanvas = document.getElementById('sick-days-chart');
+
+  if (rollingCanvas) {
+    init30DayChart(rollingCanvas);
+  }
+
+  if (sickDaysCanvas) {
+    initSickDaysChart(sickDaysCanvas);
+  }
+
+  // Update summary on charts page too
+  updateSummary();
+}
+
+// ===========================
 // Event Listeners
 // ===========================
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Load data and render
+  // Load data
   loadData();
+
+  // Check if we're on the charts page
+  const rollingChartCanvas = document.getElementById('rolling-chart');
+  const sickDaysChartCanvas = document.getElementById('sick-days-chart');
+
+  if (rollingChartCanvas || sickDaysChartCanvas) {
+    // We're on the charts page
+    initCharts();
+    return;
+  }
+
+  // We're on the main page
   renderPersonnelList();
 
   // Add Personnel button
-  document
-    .getElementById('add-personnel-btn')
-    .addEventListener('click', handleAddPersonnel);
+  const addPersonnelBtn = document.getElementById('add-personnel-btn');
+  if (addPersonnelBtn) {
+    addPersonnelBtn.addEventListener('click', handleAddPersonnel);
+  }
 
   // Search input
-  document.getElementById('personnel-search').addEventListener('input', e => {
-    searchFilter = e.target.value;
-    renderPersonnelList();
-  });
+  const searchInput = document.getElementById('personnel-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', e => {
+      searchFilter = e.target.value;
+      renderPersonnelList();
+    });
+  }
 
   // Leave type filter
-  document.getElementById('leave-type-filter').addEventListener('change', e => {
-    leaveTypeFilter = e.target.value;
-    renderPersonnelList();
-  });
+  const leaveTypeFilterEl = document.getElementById('leave-type-filter');
+  if (leaveTypeFilterEl) {
+    leaveTypeFilterEl.addEventListener('change', e => {
+      leaveTypeFilter = e.target.value;
+      renderPersonnelList();
+    });
+  }
 
   // Role filter
-  document.getElementById('role-filter').addEventListener('change', e => {
-    roleFilter = e.target.value;
-    renderPersonnelList();
-  });
+  const roleFilterEl = document.getElementById('role-filter');
+  if (roleFilterEl) {
+    roleFilterEl.addEventListener('change', e => {
+      roleFilter = e.target.value;
+      renderPersonnelList();
+    });
+  }
 
   // Personnel form
-  document
-    .getElementById('personnel-form')
-    .addEventListener('submit', handleSavePersonnel);
+  const personnelForm = document.getElementById('personnel-form');
+  if (personnelForm) {
+    personnelForm.addEventListener('submit', handleSavePersonnel);
+  }
 
   // Leave form
-  document
-    .getElementById('leave-form')
-    .addEventListener('submit', handleSaveLeave);
+  const leaveForm = document.getElementById('leave-form');
+  if (leaveForm) {
+    leaveForm.addEventListener('submit', handleSaveLeave);
+  }
 
   // Leave type change handler
-  document
-    .getElementById('leave-type')
-    .addEventListener('change', toggleEndDateField);
+  const leaveTypeEl = document.getElementById('leave-type');
+  if (leaveTypeEl) {
+    leaveTypeEl.addEventListener('change', toggleEndDateField);
+  }
 
   // Return form
-  document
-    .getElementById('return-form')
-    .addEventListener('submit', handleSaveReturn);
+  const returnForm = document.getElementById('return-form');
+  if (returnForm) {
+    returnForm.addEventListener('submit', handleSaveReturn);
+  }
 
   // Delete confirmation
-  document
-    .getElementById('confirm-delete-btn')
-    .addEventListener('click', handleConfirmDelete);
+  const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+  if (confirmDeleteBtn) {
+    confirmDeleteBtn.addEventListener('click', handleConfirmDelete);
+  }
 
   // Close buttons
   document.querySelectorAll('.close-btn, .cancel-btn').forEach(btn => {
@@ -851,21 +1207,24 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Event delegation for dynamic buttons
-  document.getElementById('personnel-list').addEventListener('click', e => {
-    if (e.target.classList.contains('edit-btn')) {
-      const personId = e.target.dataset.id;
-      handleEditPersonnel(personId);
-    } else if (e.target.classList.contains('delete-btn')) {
-      const personId = e.target.dataset.id;
-      handleDeletePersonnel(personId);
-    } else if (e.target.classList.contains('register-leave-btn')) {
-      const personId = e.target.dataset.id;
-      handleRegisterLeave(personId);
-    } else if (e.target.classList.contains('mark-return-btn')) {
-      const personId = e.target.dataset.id;
-      handleMarkReturn(personId);
-    }
-  });
+  const personnelList = document.getElementById('personnel-list');
+  if (personnelList) {
+    personnelList.addEventListener('click', e => {
+      if (e.target.classList.contains('edit-btn')) {
+        const personId = e.target.dataset.id;
+        handleEditPersonnel(personId);
+      } else if (e.target.classList.contains('delete-btn')) {
+        const personId = e.target.dataset.id;
+        handleDeletePersonnel(personId);
+      } else if (e.target.classList.contains('register-leave-btn')) {
+        const personId = e.target.dataset.id;
+        handleRegisterLeave(personId);
+      } else if (e.target.classList.contains('mark-return-btn')) {
+        const personId = e.target.dataset.id;
+        handleMarkReturn(personId);
+      }
+    });
+  }
 
   // Keyboard shortcuts
   document.addEventListener('keydown', e => {
