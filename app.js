@@ -3,6 +3,9 @@
 // ===========================
 
 let personnelData = [];
+let searchFilter = '';
+let leaveTypeFilter = 'all';
+let roleFilter = 'all';
 
 // Generate unique ID
 function generateId() {
@@ -15,6 +18,17 @@ function loadData() {
     const stored = localStorage.getItem('personnelData');
     if (stored) {
       personnelData = JSON.parse(stored);
+      // Migration: Add type field to existing records without it
+      personnelData.forEach(person => {
+        if (person.sicknessRecords) {
+          person.sicknessRecords.forEach(record => {
+            if (!record.type) {
+              record.type = 'sick';
+            }
+          });
+        }
+      });
+      saveData(); // Save migrated data
     } else {
       personnelData = [];
     }
@@ -83,29 +97,66 @@ function getPersonnelById(id) {
 }
 
 // ===========================
-// Sickness Tracking
+// Leave Tracking
 // ===========================
 
-// Register sick leave
-function registerSickLeave(personId, startDate, comment = '') {
+// Check if a leave record is currently active
+function isLeaveActive(record) {
+  if (!record) return false;
+
+  const today = new Date().toISOString().split('T')[0];
+  const startDateStr = record.startDate;
+
+  // If start date is in the future, it's not active yet (compare as strings)
+  if (startDateStr >= today) return false;
+
+  // If no end date, it's active (sick/VAB) - started and not ended
+  if (record.endDate === null) return true;
+
+  // If has end date, check if today is between start and end (compare as strings)
+  const endDateStr = record.endDate;
+  return today >= startDateStr && today <= endDateStr;
+}
+
+// Register leave (sick, VAB, or parental)
+function registerLeave(
+  personId,
+  type,
+  startDate,
+  endDate = null,
+  comment = ''
+) {
   const person = getPersonnelById(personId);
   if (!person) return false;
 
-  // Check if there's already an open sick period
-  const hasOpenPeriod = person.sicknessRecords.some(
-    record => record.endDate === null
+  // Check if there's already an active leave period
+  const hasActivePeriod = person.sicknessRecords.some(record =>
+    isLeaveActive(record)
   );
-  if (hasOpenPeriod) {
+  if (hasActivePeriod) {
     alert(
-      'Denna person har redan en öppen sjukskrivningsperiod. Vänligen avsluta den innan du registrerar en ny.'
+      'Denna person har redan en aktiv frånvaroperiod. Vänligen avsluta den innan du registrerar en ny.'
     );
     return false;
   }
 
+  // Validate end date for parental leave
+  if (type === 'parental') {
+    if (!endDate) {
+      alert('Slutdatum krävs för föräldraledighet.');
+      return false;
+    }
+    if (new Date(endDate) < new Date(startDate)) {
+      alert('Slutdatum kan inte vara tidigare än startdatum.');
+      return false;
+    }
+  }
+
   const record = {
     startDate: startDate,
-    endDate: null,
-    comment: comment.trim()
+    endDate: endDate,
+    comment: comment.trim(),
+    type: type
   };
 
   person.sicknessRecords.push(record);
@@ -118,24 +169,24 @@ function registerReturn(personId, returnDate) {
   const person = getPersonnelById(personId);
   if (!person) return false;
 
-  // Find the open sick record
-  const openRecord = person.sicknessRecords.find(
-    record => record.endDate === null
+  // Find the active leave record
+  const activeRecord = person.sicknessRecords.find(record =>
+    isLeaveActive(record)
   );
-  if (!openRecord) {
-    alert('Ingen öppen sjukskrivningsperiod hittades för denna person.');
+  if (!activeRecord) {
+    alert('Ingen aktiv frånvaroperiod hittades för denna person.');
     return false;
   }
 
-  // Validate return date is not before start date
-  if (new Date(returnDate) < new Date(openRecord.startDate)) {
-    alert(
-      'Återgångsdatum kan inte vara tidigare än sjukskrivningens startdatum.'
-    );
+  // Validate return date is not before start date (compare as strings YYYY-MM-DD)
+  // This allows today and any future date
+  if (returnDate < activeRecord.startDate) {
+    alert('Återgångsdatum kan inte vara tidigare än frånvarons startdatum.');
     return false;
   }
 
-  openRecord.endDate = returnDate;
+  // Set the end date (this works for all leave types)
+  activeRecord.endDate = returnDate;
   saveData();
   return true;
 }
@@ -149,17 +200,31 @@ function calculateSickDays(startDate, endDate) {
   return diffDays + 1; // Inclusive (both start and end dates count)
 }
 
-// Get current sick status
-function getCurrentSickStatus(person) {
-  const openRecord = person.sicknessRecords.find(
-    record => record.endDate === null
+// Get current leave status
+function getCurrentLeaveStatus(person) {
+  const activeRecord = person.sicknessRecords.find(record =>
+    isLeaveActive(record)
   );
-  return openRecord;
+  return activeRecord;
 }
 
-// Get sick count
-function getSickCount() {
-  return personnelData.filter(person => getCurrentSickStatus(person)).length;
+// Get leave counts
+function getLeaveCounts() {
+  const counts = { sick: 0, vab: 0, parental: 0, total: 0 };
+  personnelData.forEach(person => {
+    const currentLeave = getCurrentLeaveStatus(person);
+    if (currentLeave) {
+      counts.total++;
+      if (currentLeave.type === 'sick') {
+        counts.sick++;
+      } else if (currentLeave.type === 'vab') {
+        counts.vab++;
+      } else if (currentLeave.type === 'parental') {
+        counts.parental++;
+      }
+    }
+  });
+  return counts;
 }
 
 // ===========================
@@ -171,16 +236,34 @@ function renderPersonnelList() {
   const container = document.getElementById('personnel-list');
   const emptyState = document.getElementById('empty-state');
 
-  if (personnelData.length === 0) {
+  // Update role filter options before filtering
+  updateRoleFilterOptions();
+
+  // Filter personnel based on search term and filters
+  const filteredPersonnel = filterPersonnel(
+    personnelData,
+    searchFilter,
+    leaveTypeFilter,
+    roleFilter
+  );
+
+  if (filteredPersonnel.length === 0) {
     container.innerHTML = '';
-    emptyState.classList.remove('hidden');
+    if (personnelData.length === 0) {
+      emptyState.classList.remove('hidden');
+    } else {
+      emptyState.classList.add('hidden');
+      // Show message when search/filters return no results
+      container.innerHTML =
+        '<div class="empty-state"><p>Inga resultat hittades för din sökning/filter.</p></div>';
+    }
     return;
   }
 
   emptyState.classList.add('hidden');
   container.innerHTML = '';
 
-  personnelData.forEach(person => {
+  filteredPersonnel.forEach(person => {
     const card = createPersonnelCard(person);
     container.appendChild(card);
   });
@@ -188,28 +271,170 @@ function renderPersonnelList() {
   updateSummary();
 }
 
+// Filter personnel by search term (name or role)
+function filterPersonnel(personnel, searchTerm, leaveTypeFilter, roleFilter) {
+  let filtered = personnel;
+
+  // Apply search filter
+  if (searchTerm && searchTerm.trim() !== '') {
+    const term = searchTerm.toLowerCase().trim();
+    filtered = filtered.filter(person => {
+      const nameMatch = person.name.toLowerCase().includes(term);
+      const roleMatch = person.role && person.role.toLowerCase().includes(term);
+      return nameMatch || roleMatch;
+    });
+  }
+
+  // Apply leave type filter
+  if (leaveTypeFilter && leaveTypeFilter !== 'all') {
+    filtered = filtered.filter(person => {
+      const currentLeave = getCurrentLeaveStatus(person);
+      if (leaveTypeFilter === 'at-work') {
+        return !currentLeave;
+      } else {
+        return currentLeave && currentLeave.type === leaveTypeFilter;
+      }
+    });
+  }
+
+  // Apply role filter
+  const distinctRoles = getDistinctRoles();
+  if (roleFilter && roleFilter !== 'all') {
+    filtered = filtered.filter(person => {
+      // If person has no role, only show if no distinct roles exist
+      if (!person.role || person.role.trim() === '') {
+        return distinctRoles.length === 0;
+      }
+      return person.role.trim() === roleFilter;
+    });
+  }
+  // When filter is 'all' or no distinct roles exist, show everyone (including those without roles)
+  // This is the default behavior, so no additional filtering needed
+
+  return filtered;
+}
+
+// Get distinct role values from personnel data
+function getDistinctRoles() {
+  const roles = new Set();
+  personnelData.forEach(person => {
+    if (person.role && person.role.trim() !== '') {
+      roles.add(person.role.trim());
+    }
+  });
+  return Array.from(roles).sort();
+}
+
+// Check if role filter should be shown
+function shouldShowRoleFilter() {
+  return getDistinctRoles().length > 0;
+}
+
+// Update role filter options based on available roles
+function updateRoleFilterOptions() {
+  const roleFilterSelect = document.getElementById('role-filter');
+  const distinctRoles = getDistinctRoles();
+
+  if (distinctRoles.length > 0) {
+    // Show the filter
+    roleFilterSelect.style.display = 'block';
+
+    // Use roleFilter as source of truth for current selection
+    const currentValue = roleFilter;
+
+    // Clear existing options except "Alla Roller"
+    roleFilterSelect.innerHTML = '<option value="all">Alla områden</option>';
+
+    // Add distinct roles as options
+    distinctRoles.forEach(role => {
+      const option = document.createElement('option');
+      option.value = role;
+      option.textContent = role;
+      roleFilterSelect.appendChild(option);
+    });
+
+    // Restore the selection if it's still valid, otherwise reset to 'all'
+    if (currentValue === 'all' || distinctRoles.includes(currentValue)) {
+      roleFilterSelect.value = currentValue;
+    } else {
+      roleFilter = 'all';
+      roleFilterSelect.value = 'all';
+    }
+  } else {
+    // Hide the filter and reset to 'all'
+    roleFilterSelect.style.display = 'none';
+    roleFilter = 'all';
+    roleFilterSelect.value = 'all';
+  }
+}
+
 // Create personnel card
 function createPersonnelCard(person) {
   const card = document.createElement('div');
-  const currentSick = getCurrentSickStatus(person);
-  const isSick = currentSick !== undefined;
+  const currentLeave = getCurrentLeaveStatus(person);
+  const hasLeave = currentLeave !== undefined;
 
-  card.className = `personnel-card ${isSick ? 'sick' : 'at-work'}`;
+  // Determine card class and status badge based on leave type
+  let cardClass = 'at-work';
+  let statusText = 'På Jobbet';
+  let statusBadgeClass = 'at-work';
+  let leaveInfoLabel = '';
+  let leaveTypeLabel = '';
 
-  let sicknessInfoHTML = '';
-  if (isSick) {
+  if (hasLeave) {
+    if (currentLeave.type === 'sick') {
+      cardClass = 'sick';
+      statusText = 'Sjuk';
+      statusBadgeClass = 'sick';
+      leaveInfoLabel = 'Sjuk sedan:';
+      leaveTypeLabel = 'Antal dagar sjuk:';
+    } else if (currentLeave.type === 'vab') {
+      cardClass = 'vab';
+      statusText = 'VAB';
+      statusBadgeClass = 'vab';
+      leaveInfoLabel = 'VAB sedan:';
+      leaveTypeLabel = 'Antal dagar VAB:';
+    } else if (currentLeave.type === 'parental') {
+      cardClass = 'parental';
+      statusText = 'Föräldraledig';
+      statusBadgeClass = 'parental';
+      leaveInfoLabel = 'Föräldraledig från:';
+      leaveTypeLabel = 'Antal dagar:';
+    }
+  }
+
+  card.className = `personnel-card ${cardClass}`;
+
+  let leaveInfoHTML = '';
+  if (hasLeave) {
     const today = new Date().toISOString().split('T')[0];
-    const days = calculateSickDays(currentSick.startDate, today);
-    sicknessInfoHTML = `
-            <div class="sickness-info current">
-                <p><strong>Sjuk sedan:</strong> ${formatDate(
-                  currentSick.startDate
-                )}</p>
-                <p><strong>Antal dagar sjuk:</strong> ${days}</p>
+    // For active leave, calculate days up to today (or end date if it's in the past)
+    let calculationEndDate = today;
+    if (currentLeave.endDate) {
+      const endDateObj = new Date(currentLeave.endDate);
+      const todayObj = new Date(today);
+      // Use the earlier of today or end date
+      calculationEndDate = endDateObj < todayObj ? currentLeave.endDate : today;
+    }
+    const days = calculateSickDays(currentLeave.startDate, calculationEndDate);
+
+    leaveInfoHTML = `
+            <div class="leave-info current ${currentLeave.type}">
+                <p><strong>${leaveInfoLabel}</strong> ${formatDate(
+      currentLeave.startDate
+    )}</p>
                 ${
-                  currentSick.comment
-                    ? `<p><strong>Orsak:</strong> ${escapeHtml(
-                        currentSick.comment
+                  currentLeave.endDate && currentLeave.type === 'parental'
+                    ? `<p><strong>Föräldraledig till:</strong> ${formatDate(
+                        currentLeave.endDate
+                      )}</p>`
+                    : ''
+                }
+                <p><strong>${leaveTypeLabel}</strong> ${days}</p>
+                ${
+                  currentLeave.comment
+                    ? `<p><strong>Kommentar:</strong> ${escapeHtml(
+                        currentLeave.comment
                       )}</p>`
                     : ''
                 }
@@ -217,8 +442,8 @@ function createPersonnelCard(person) {
         `;
   }
 
-  // Show sickness history (closed records)
-  const closedRecords = person.sicknessRecords.filter(r => r.endDate !== null);
+  // Show leave history (closed/inactive records only)
+  const closedRecords = person.sicknessRecords.filter(r => !isLeaveActive(r));
   let historyHTML = '';
   if (closedRecords.length > 0) {
     const historyItems = closedRecords
@@ -226,11 +451,19 @@ function createPersonnelCard(person) {
       .reverse()
       .map(record => {
         const days = calculateSickDays(record.startDate, record.endDate);
+        const typeLabel =
+          record.type === 'sick'
+            ? 'Sjuk'
+            : record.type === 'vab'
+            ? 'VAB'
+            : record.type === 'parental'
+            ? 'Föräldraledig'
+            : 'Frånvaro';
         return `
                 <div class="history-item">
-                    ${formatDate(record.startDate)} - ${formatDate(
-          record.endDate
-        )} (${days} dagar)
+                    ${typeLabel}: ${formatDate(
+          record.startDate
+        )} - ${formatDate(record.endDate)} (${days} dagar)
                     ${
                       record.comment
                         ? `<br><em>${escapeHtml(record.comment)}</em>`
@@ -259,20 +492,20 @@ function createPersonnelCard(person) {
                     : ''
                 }
             </div>
-            <span class="status-badge ${isSick ? 'sick' : 'at-work'}">
-                ${isSick ? 'Sjuk' : 'På Jobbet'}
+            <span class="status-badge ${statusBadgeClass}">
+                ${statusText}
             </span>
         </div>
-        ${sicknessInfoHTML}
+        ${leaveInfoHTML}
         ${historyHTML}
         <div class="personnel-actions">
             ${
-              !isSick
-                ? `<button class="btn btn-small btn-danger mark-sick-btn" data-id="${person.id}">Markera Sjuk</button>`
+              !hasLeave
+                ? `<button class="btn btn-small btn-primary register-leave-btn" data-id="${person.id}">Registrera Frånvaro</button>`
                 : ''
             }
             ${
-              isSick
+              hasLeave
                 ? `<button class="btn btn-small btn-success mark-return-btn" data-id="${person.id}">Återgång till Arbete</button>`
                 : ''
             }
@@ -290,8 +523,11 @@ function createPersonnelCard(person) {
 
 // Update summary
 function updateSummary() {
-  const sickCount = getSickCount();
-  document.getElementById('sick-count').textContent = sickCount;
+  const counts = getLeaveCounts();
+  document.getElementById('sick-count').textContent = counts.sick;
+  document.getElementById('vab-count').textContent = counts.vab;
+  document.getElementById('parental-count').textContent = counts.parental;
+  document.getElementById('total-absent').textContent = counts.total;
 }
 
 // ===========================
@@ -383,35 +619,64 @@ function handleConfirmDelete() {
   renderPersonnelList();
 }
 
-// Mark Sick
-function handleMarkSick(personId) {
+// Register Leave
+function handleRegisterLeave(personId) {
   const person = getPersonnelById(personId);
   if (!person) return;
 
-  document.getElementById('sick-person-id').value = person.id;
-  document.getElementById('sick-person-name').value = person.name;
-  document.getElementById('sick-start-date').value = new Date()
+  document.getElementById('leave-person-id').value = person.id;
+  document.getElementById('leave-person-name').value = person.name;
+  document.getElementById('leave-start-date').value = new Date()
     .toISOString()
     .split('T')[0];
-  document.getElementById('sick-comment').value = '';
-  openModal('sick-modal');
+  document.getElementById('leave-comment').value = '';
+  document.getElementById('leave-type').value = 'sick';
+  document.getElementById('leave-end-date').value = '';
+
+  // Toggle end date field visibility
+  toggleEndDateField();
+
+  openModal('leave-modal');
 }
 
-// Save Sick Leave
-function handleSaveSickLeave(event) {
+// Toggle end date field based on leave type
+function toggleEndDateField() {
+  const leaveType = document.getElementById('leave-type').value;
+  const endDateGroup = document.getElementById('leave-end-date-group');
+  const endDateInput = document.getElementById('leave-end-date');
+
+  if (leaveType === 'parental') {
+    endDateGroup.style.display = 'block';
+    endDateInput.required = true;
+  } else {
+    endDateGroup.style.display = 'none';
+    endDateInput.required = false;
+    endDateInput.value = '';
+  }
+}
+
+// Save Leave
+function handleSaveLeave(event) {
   event.preventDefault();
 
-  const personId = document.getElementById('sick-person-id').value;
-  const startDate = document.getElementById('sick-start-date').value;
-  const comment = document.getElementById('sick-comment').value;
+  const personId = document.getElementById('leave-person-id').value;
+  const type = document.getElementById('leave-type').value;
+  const startDate = document.getElementById('leave-start-date').value;
+  const endDate = document.getElementById('leave-end-date').value;
+  const comment = document.getElementById('leave-comment').value;
 
   if (!startDate) {
     alert('Startdatum krävs.');
     return;
   }
 
-  if (registerSickLeave(personId, startDate, comment)) {
-    closeModal('sick-modal');
+  if (type === 'parental' && !endDate) {
+    alert('Slutdatum krävs för föräldraledighet.');
+    return;
+  }
+
+  if (registerLeave(personId, type, startDate, endDate || null, comment)) {
+    closeModal('leave-modal');
     renderPersonnelList();
   }
 }
@@ -421,18 +686,21 @@ function handleMarkReturn(personId) {
   const person = getPersonnelById(personId);
   if (!person) return;
 
-  const currentSick = getCurrentSickStatus(person);
-  if (!currentSick) {
-    alert('Ingen öppen sjukskrivningsperiod hittades.');
+  const currentLeave = getCurrentLeaveStatus(person);
+  if (!currentLeave) {
+    alert('Ingen öppen frånvaroperiod hittades.');
     return;
   }
 
+  const returnDateInput = document.getElementById('return-date');
   document.getElementById('return-person-id').value = person.id;
   document.getElementById('return-person-name').value = person.name;
-  document.getElementById('return-date').value = new Date()
-    .toISOString()
-    .split('T')[0];
-  document.getElementById('return-date').min = currentSick.startDate;
+  returnDateInput.value = new Date().toISOString().split('T')[0];
+  returnDateInput.min = currentLeave.startDate;
+  // Explicitly allow future dates by setting max to a far future date
+  const farFutureDate = new Date();
+  farFutureDate.setFullYear(farFutureDate.getFullYear() + 10);
+  returnDateInput.max = farFutureDate.toISOString().split('T')[0];
   openModal('return-modal');
 }
 
@@ -441,10 +709,17 @@ function handleSaveReturn(event) {
   event.preventDefault();
 
   const personId = document.getElementById('return-person-id').value;
-  const returnDate = document.getElementById('return-date').value;
+  const returnDateInput = document.getElementById('return-date');
+  const returnDate = returnDateInput.value;
 
   if (!returnDate) {
     alert('Återgångsdatum krävs.');
+    return;
+  }
+
+  // Check if the date input has a validation error
+  if (!returnDateInput.validity.valid) {
+    alert('Ogiltigt datum. Vänligen välj ett giltigt datum.');
     return;
   }
 
@@ -487,15 +762,38 @@ document.addEventListener('DOMContentLoaded', () => {
     .getElementById('add-personnel-btn')
     .addEventListener('click', handleAddPersonnel);
 
+  // Search input
+  document.getElementById('personnel-search').addEventListener('input', e => {
+    searchFilter = e.target.value;
+    renderPersonnelList();
+  });
+
+  // Leave type filter
+  document.getElementById('leave-type-filter').addEventListener('change', e => {
+    leaveTypeFilter = e.target.value;
+    renderPersonnelList();
+  });
+
+  // Role filter
+  document.getElementById('role-filter').addEventListener('change', e => {
+    roleFilter = e.target.value;
+    renderPersonnelList();
+  });
+
   // Personnel form
   document
     .getElementById('personnel-form')
     .addEventListener('submit', handleSavePersonnel);
 
-  // Sick form
+  // Leave form
   document
-    .getElementById('sick-form')
-    .addEventListener('submit', handleSaveSickLeave);
+    .getElementById('leave-form')
+    .addEventListener('submit', handleSaveLeave);
+
+  // Leave type change handler
+  document
+    .getElementById('leave-type')
+    .addEventListener('change', toggleEndDateField);
 
   // Return form
   document
@@ -534,9 +832,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (e.target.classList.contains('delete-btn')) {
       const personId = e.target.dataset.id;
       handleDeletePersonnel(personId);
-    } else if (e.target.classList.contains('mark-sick-btn')) {
+    } else if (e.target.classList.contains('register-leave-btn')) {
       const personId = e.target.dataset.id;
-      handleMarkSick(personId);
+      handleRegisterLeave(personId);
     } else if (e.target.classList.contains('mark-return-btn')) {
       const personId = e.target.dataset.id;
       handleMarkReturn(personId);

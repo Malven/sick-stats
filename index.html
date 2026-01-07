@@ -11,13 +11,36 @@
     <header>
       <h1>Sjukfrånvaro</h1>
       <div class="summary">
-        <span id="sick-count">0</span> personal sjukskrivna just nu
+        <span id="sick-count">0</span> sjuka, <span id="vab-count">0</span> VAB,
+        <span id="parental-count">0</span> föräldralediga (<span
+          id="total-absent"
+          >0</span
+        >
+        totalt)
       </div>
     </header>
 
     <!-- Main Content -->
     <main>
       <div class="controls">
+        <input
+          type="text"
+          id="personnel-search"
+          class="search-input"
+          placeholder="Sök personal..."
+        />
+        <div class="filters-container">
+          <select id="leave-type-filter" class="filter-select">
+            <option value="all">Alla</option>
+            <option value="sick">Sjuk</option>
+            <option value="vab">VAB</option>
+            <option value="parental">Föräldraledig</option>
+            <option value="at-work">På Jobbet</option>
+          </select>
+          <select id="role-filter" class="filter-select" style="display: none">
+            <option value="all">Alla Områden</option>
+          </select>
+        </div>
         <button id="add-personnel-btn" class="btn btn-primary">
           + Lägg till Personal
         </button>
@@ -51,7 +74,7 @@
             <input type="text" id="personnel-name" name="name" required />
           </div>
           <div class="form-group">
-            <label for="personnel-role">Roll/Avdelning</label>
+            <label for="personnel-role">Område</label>
             <input type="text" id="personnel-role" name="role" />
           </div>
           <input type="hidden" id="personnel-id" name="id" />
@@ -65,35 +88,60 @@
       </div>
     </div>
 
-    <!-- Register Sick Leave Modal -->
-    <div id="sick-modal" class="modal">
+    <!-- Register Leave Modal -->
+    <div id="leave-modal" class="modal">
       <div class="modal-content">
         <div class="modal-header">
-          <h2>Registrera Sjukfrånvaro</h2>
+          <h2>Registrera Frånvaro</h2>
           <button class="close-btn" aria-label="Stäng">&times;</button>
         </div>
-        <form id="sick-form">
+        <form id="leave-form">
           <div class="form-group">
-            <label for="sick-person-name">Personal</label>
-            <input type="text" id="sick-person-name" readonly />
+            <label for="leave-person-name">Personal</label>
+            <input type="text" id="leave-person-name" readonly />
           </div>
           <div class="form-group">
-            <label for="sick-start-date"
+            <label for="leave-type"
+              >Frånvarotyp <span class="required">*</span></label
+            >
+            <select id="leave-type" name="type" required>
+              <option value="sick">Sjuk</option>
+              <option value="vab">VAB (Vård Av Barn)</option>
+              <option value="parental">Föräldraledig</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="leave-start-date"
               >Startdatum <span class="required">*</span></label
             >
-            <input type="date" id="sick-start-date" name="startDate" required />
+            <input
+              type="date"
+              id="leave-start-date"
+              name="startDate"
+              required
+            />
+          </div>
+          <div
+            class="form-group"
+            id="leave-end-date-group"
+            style="display: none"
+          >
+            <label for="leave-end-date"
+              >Slutdatum <span class="required">*</span></label
+            >
+            <input type="date" id="leave-end-date" name="endDate" />
           </div>
           <div class="form-group">
-            <label for="sick-comment">Kommentar/Orsak</label>
-            <textarea id="sick-comment" name="comment" rows="3"></textarea>
+            <label for="leave-comment">Kommentar</label>
+            <textarea id="leave-comment" name="comment" rows="3"></textarea>
           </div>
-          <input type="hidden" id="sick-person-id" name="personId" />
+          <input type="hidden" id="leave-person-id" name="personId" />
           <div class="form-actions">
             <button type="button" class="btn btn-secondary cancel-btn">
               Avbryt
             </button>
             <button type="submit" class="btn btn-primary">
-              Registrera Sjukfrånvaro
+              Registrera Frånvaro
             </button>
           </div>
         </form>
@@ -145,7 +193,7 @@
             <strong id="delete-person-name"></strong>?
           </p>
           <p class="warning">
-            Alla tillhörande sjukfrånvaroposter kommer att tas bort permanent.
+            Alla tillhörande frånvaroposter kommer att tas bort permanent.
           </p>
         </div>
         <input type="hidden" id="delete-person-id" />
