@@ -533,15 +533,23 @@ function createPersonnelCard(person) {
   let leaveInfoHTML = '';
   if (hasLeave) {
     const today = new Date().toISOString().split('T')[0];
-    // For active leave, calculate days up to today (or end date if it's in the past)
-    let calculationEndDate = today;
-    if (currentLeave.endDate) {
-      const endDateObj = new Date(currentLeave.endDate);
-      const todayObj = new Date(today);
-      // Use the earlier of today or end date
-      calculationEndDate = endDateObj < todayObj ? currentLeave.endDate : today;
+    let days;
+
+    // For parental leave, always show total days from start to end date
+    if (currentLeave.type === 'parental' && currentLeave.endDate) {
+      days = calculateSickDays(currentLeave.startDate, currentLeave.endDate);
+    } else {
+      // For other leave types, calculate days up to today (or end date if it's in the past)
+      let calculationEndDate = today;
+      if (currentLeave.endDate) {
+        const endDateObj = new Date(currentLeave.endDate);
+        const todayObj = new Date(today);
+        // Use the earlier of today or end date
+        calculationEndDate =
+          endDateObj < todayObj ? currentLeave.endDate : today;
+      }
+      days = calculateSickDays(currentLeave.startDate, calculationEndDate);
     }
-    const days = calculateSickDays(currentLeave.startDate, calculationEndDate);
 
     // Check if warning is needed for sick leave >= 7 days
     const showWarning = currentLeave.type === 'sick' && days >= 7;
